@@ -1,3 +1,4 @@
+const { on } = require("events");
 const express = require("express");
 const app = express();
 const http = require("http");
@@ -35,6 +36,23 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(8002, () => {
-  console.log("listening on 8001");
+const MessageQueue = require("./message-queue");
+const pmIo = io.of("/private-messages");
+const messageQueue = new MessageQueue(pmIo);
+pmIo.on("connection", (socket) => {
+  let clientId = null;
+  socket.on("set-username", (data) => {
+    const USERNAME = data.username;
+    clientId = USERNAME;
+    console.log("set-username", data.username);
+    messageQueue.addClientToRoom(clientId, socket);
+  });
+  socket.on("pm-message", (messagePackage) => {
+    messageQueue.addMessage({ ...messagePackage, from: clientId });
+  });
+});
+
+const PORT = 8001;
+server.listen(PORT, () => {
+  console.log("listening on", process.env.PORT || PORT);
 });

@@ -28,6 +28,25 @@
             <input type="text" x-model="message"/>
             <button x-on:click="chat">Send</button>
         </div>
+        <div x-show="chatting">
+            <h3>Private Messages</h3>
+            <div>
+                <template x-for="m in privateMessages">
+                    <div style="border: 1px">
+                        From: <strong x-text="m.from"></strong>: 
+                        To: <strong x-text="m.to"></strong>: 
+                        <span x-text="m.body.content"></span>
+                    </div>
+                </template>
+            </div>
+            <div>
+                Send to <input type="text" x-model="privateChatPartner"/>
+                <br>
+                <textarea x-model="privateChatContent"></textarea>
+                <br>
+                <button x-on:click="sendPrivateMessage">Send</button>
+            </div>
+        </div>
     </div>
     <script type="module">
         import Alpine from 'https://cdn.skypack.dev/alpinejs';
@@ -42,6 +61,9 @@
             message: "",
             usernameIsTaken: "",
             messages: [{username: "server", message: "Welcome to chat!"}],
+            privateChatPartner: "",
+            privateChatContent: "",
+            privateMessages: [],
             createUser(){
                 this.usernameIsTaken = "";
                 sendCreateUser(this.username);
@@ -61,6 +83,15 @@
             },
             usernameIsTakenError(username){
                 this.usernameIsTaken = username;
+            },
+            sendPrivateMessage(){
+                console.log(this.privateChatPartner, this.privateChatContent)
+                sendPrivateMessage(this.privateChatContent, this.privateChatPartner)
+                this.privateMessages= this.privateMessages.concat([{from: "me", to: this.privateChatPartner,  body: {content: this.privateChatContent}}])
+                this.privateChatContent = "";
+            },
+            receivePrivateMessage(messagePackage){
+                this.privateMessages = this.privateMessages.concat([messagePackage])
             }
         })
         Alpine.store("message",{
@@ -73,10 +104,12 @@
         Alpine.store('message').setMessage("More")
 
         const socket = io();
+        const pmIo = io("/private-messages");
         //socket.on("message", console.log)
         socket.on("message", (m)=>{Alpine.store("message").setMessage(m.message)})
         socket.on("userCreated", (data)=>{
             Alpine.store("app").startChat(data.username)
+            pmIo.emit('set-username', data)
         })
 
         socket.on("user-exists", (data)=>{
@@ -91,6 +124,19 @@
         const sendChat = (message) => {
             socket.emit("chat-message", {message})
         }
+
+        const sendPrivateMessage = (message, recipent) => {
+            const messagePackage = {
+                to: recipent,
+                body: {content: message}
+            }
+            pmIo.emit("pm-message", messagePackage)
+        }
+
+        pmIo.on("pm-message-for-you", (data) => {
+            console.log("private message", data);
+            Alpine.store("app").receivePrivateMessage(data);
+        })
 
         socket.on("new-chat-message", (data) => {
             // const {username, message} = data;
